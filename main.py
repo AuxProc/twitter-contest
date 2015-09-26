@@ -109,6 +109,9 @@ class IgnoreList(list):
 
 ignore_list = None
 
+# Schedule random times over the course of the day to call UpdateQueue, 
+# giving the application the appearance of manual interaction.
+# Number of tweets per day can be defined in config - daily-tweets.
 def RandomTimes():
 	# we need to parse today's state to properly
 	# schedule the tweet times
