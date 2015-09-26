@@ -4,6 +4,9 @@ import logging
 import time
 import json
 import sys
+from datetime import datetime, timedelta, date
+from apscheduler.schedulers.blocking import BlockingScheduler
+import random
 
 
 def get_logger():
@@ -44,6 +47,7 @@ class Config:
     consumer_secret = None
     access_token_key = None
     access_token_secret = None
+    daily_tweets = 300
     retweet_update_time = 60
     scan_update_time = 5400
     clear_queue_time = 43200
@@ -104,6 +108,55 @@ class IgnoreList(list):
 
 ignore_list = None
 
+def RandomTimes():
+	# we need to parse today's state to properly
+	# schedule the tweet times
+	dadate = datetime.now()
+	year = dadate.year
+	month = dadate.month
+	day = dadate.day
+
+	# the lower bound
+	lower_bound = datetime(year, month, day, 1, 0, 0)
+	logger.info("[{}] - the lower bound is {}".format(datetime.now(), lower_bound))
+
+	# the upper bound
+	upper_bound = datetime(year, month, day, 23, 0, 0)
+	logger.info("[{}] - the upper bound is {}".format(datetime.now(), upper_bound))
+
+	randsched = BlockingScheduler()
+	logger.info("[{}] - Created blocking scheduler".format(datetime.now()))
+
+	def encode_timestamp(timestamp):
+	    return str(timestamp).replace(" ", "+").replace(":", "%3A")
+
+	def random_time(start, end):
+	    sec_diff = int((end-start).total_seconds())
+	    secs_to_add = random.randint(0, sec_diff)
+	    return start + timedelta(seconds=secs_to_add)
+
+	def get_daily_tweets_random_times(n, start, end):
+	    times = []
+	    for i in range(0, Config.daily_tweets):
+	        times.append(random_time(start, end))
+	    times.sort()
+	    return times
+
+	times = get_daily_tweets_random_times(Config.daily_tweets, lower_bound, upper_bound)
+	logger.info("[{}] - Received {} times to schedule".format(datetime.now(),
+	                                                         len(times)))
+
+	for ind, atime in enumerate(times):
+	    if ind == (Config.daily_tweets-1):
+	        randsched.add_job(UpdateQueue, 'date', run_date=atime)
+	        logger.info("[{}] - added last task at {}".format(datetime.now(),
+	                                                         atime))
+	    else:
+	        randsched.add_job(UpdateQueue, 'date', run_date=atime)
+	        logger.info("[{}] - added task at {}".format(datetime.now(),
+	                                                     atime))
+
+	randsched.start()
 
 def CheckError(r):
     r = r.json()
@@ -406,11 +459,11 @@ if __name__ == '__main__':
     #Initialize Scheduler
     s = PeriodicScheduler()
 
-    s.enter(Config.clear_queue_time, 1, ClearQueue)
-    s.enter(Config.rate_limit_update_time, 2, CheckRateLimit)
-    s.enter(Config.blocked_users_update_time, 3, CheckBlockedUsers)
-    s.enter(Config.scan_update_time, 4, ScanForContests)
-    s.enter(Config.retweet_update_time, 5, UpdateQueue)
+    s.enter(86400, 1, RandomTimes)
+    s.enter(Config.clear_queue_time, 2, ClearQueue)
+    s.enter(Config.rate_limit_update_time, 3, CheckRateLimit)
+    s.enter(Config.blocked_users_update_time, 4, CheckBlockedUsers)
+    s.enter(Config.scan_update_time, 5, ScanForContests)
 
     #Init the program
     s.run()
