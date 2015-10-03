@@ -269,9 +269,8 @@ def CheckForFollowRequest(item):
             CheckError(r)
             logger.info("Follow: {0}".format(screen_name))
 
+
 # FIFO - Every new follow should result in the oldest follow being removed.
-
-
 def RemoveOldestFollow():
     friends = list()
     for id in api.request('friends/ids'):
@@ -279,19 +278,16 @@ def RemoveOldestFollow():
 
     oldest_friend = friends[-1]
 
-    if len(friends) > Config.max_follows:
+    if not len(friends) > Config.max_follows:
+    	logger.info("No friends unfollowed")
+    	return
 
-        r = api.request('friendships/destroy', {'user_id': oldest_friend})
+    r = api.request('friendships/destroy', {'user_id': oldest_friend})
 
-        if r.status_code == 200:
-            status = r.json()
-            logger.info('Unfollowed: {0}'.format(status['screen_name']))
+    if r.status_code == 200:
+        status = r.json()
+        logger.info('Unfollowed: {0}'.format(status['screen_name']))
 
-    else:
-        logger.info("No friends unfollowed")
-
-    del friends
-    del oldest_friend
 
 # Check if a post requires you to favorite the tweet.
 # Be careful with this function! Twitter may write ban your application
