@@ -137,11 +137,12 @@ def RandomTimes():
 	day = dadate.day
 
 	# the lower bound
-	lower_bound = datetime(year, month, day, 1, 0, 0)
+	lower_bound = datetime.now()
+	print(lower_bound)
 	logger.info("[{}] - the lower bound is {}".format(datetime.now(), lower_bound))
 
 	# the upper bound
-	upper_bound = datetime(year, month, day, 23, 0, 0)
+	upper_bound = lower_bound + timedelta(hours=22)
 	logger.info("[{}] - the upper bound is {}".format(datetime.now(), upper_bound))
 
 	times = get_daily_tweets_random_times(Config.daily_tweets, lower_bound, upper_bound)
@@ -211,41 +212,43 @@ def UpdateQueue():
 
     if len(post_list) > 0:
 
-        if not ratelimit[2] < Config.min_ratelimit_retweet:
+        if ratelimit[2] < Config.min_ratelimit_retweet:
+        	logger.info("Ratelimit at {0}% -> pausing retweets".format(ratelimit[2]))
+        	return
 
-            post = post_list[0]
-            if not 'errors' in post:
-                logger.info("Retweeting: {0} {1}".format(post['id'], post['text'].encode('utf8')))
+        post = post_list[0]
 
-                r = api.request('statuses/show/:%d' % post['id']).json()
-                if 'errors' in r:
-                    logger.error("We got an error message: {0} Code: {1}".format(r['errors'][0]['message'],
+        if 'errors' in post:
+        	post_list.pop(0)
+        	logger.error("We got an error message: {0} Code: {1}".format(post['errors'][0]['message'],
+                                                                         post['errors'][0]['code']))
+        	return
+
+        logger.info("Retweeting: {0} {1}".format(post['id'], post['text'].encode('utf8')))
+
+        r = api.request('statuses/show/:%d' % post['id']).json()
+        if 'errors' in r:
+        	logger.error("We got an error message: {0} Code: {1}".format(r['errors'][0]['message'],
                                                                                  r['errors'][0]['code']))
-                    post_list.pop(0)
-                else:
-                    user_item = r['user']
-                    user_id = user_item['id']
+        	post_list.pop(0)
+        	return
 
-                    if not user_id in ignore_list:
+        user_item = r['user']
+        user_id = user_item['id']
 
-                        r = api.request('statuses/retweet/:{0}'.format(post['id']))
-                        CheckError(r)
-                        post_list.pop(0)
+        if user_id in ignore_list:
+        	post_list.pop(0)
+        	logger.info("Blocked user's tweet skipped")
+        	return        
 
-                        if not 'errors' in r.json():
+        r = api.request('statuses/retweet/:{0}'.format(post['id']))
+        CheckError(r)
+        post_list.pop(0)
 
-                        	CheckForFollowRequest(post)
-                        	CheckForFavoriteRequest(post)
+        if not 'errors' in r.json():
 
-                    else:
-                        post_list.pop(0)
-                        logger.info("Blocked user's tweet skipped")
-            else:
-                post_list.pop(0)
-                logger.error("We got an error message: {0} Code: {1}".format(post['errors'][0]['message'],
-                                                                             post['errors'][0]['code']))
-        else:
-            logger.info("Ratelimit at {0}% -> pausing retweets".format(ratelimit[2]))
+            CheckForFollowRequest(post)
+            CheckForFavoriteRequest(post)            
 
 
 # Check if a post requires you to follow the user.
@@ -343,84 +346,74 @@ def ScanForContests():
 
     global ratelimit_search
 
-    if not ratelimit_search[2] < Config.min_ratelimit_search:
-
-        logger.info("=== SCANNING FOR NEW CONTESTS ===")
-
-        for search_query in Config.search_queries:
-
-            logger.info("Getting new results for: {0}".format(search_query))
-
-            try:
-                r = api.request( 'search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 50})
-                CheckError(r)
-                c = 0
-
-                for item in r:
-
-                    c = c + 1
-                    user_item = item['user']
-                    screen_name = user_item['screen_name']
-                    text = item['text']
-                    text = text.replace("\n", "")
-                    id = item['id']
-                    original_id = id
-
-                    if 'retweeted_status' in item:
-
-                        original_item = item['retweeted_status']
-                        original_id = original_item['id']
-                        original_user_item = original_item['user']
-                        original_screen_name = original_user_item['screen_name']
-
-                        if not original_id in ignore_list:
-
-                            if not original_user_item['id'] in ignore_list:
-
-                                post_list.append(original_item)
-
-                                logger.info("{0} - {1} retweeting {2} - {3} : {4}".format(id, screen_name, original_id,
-                                                                                          original_screen_name,text))
-
-                                ignore_list.append(original_id)
-
-                            else:
-
-                                logger.info("{0} ignored {1} blocked and in ignore list".format(id,
-                                                                                                original_screen_name))
-                        else:
-
-                            logger.info("{0} ignored {1} in ignore list".format(id, original_id))
-
-                    else:
-
-                        if not id in ignore_list:
-
-                            if not user_item['id'] in ignore_list:
-
-                                post_list.append(item)
-
-                                logger.info("{0} - {1} : {2}".format(id, screen_name, text))
-                                ignore_list.append(id)
-
-                            else:
-
-                                logger.info("{0} ignored {1} blocked user in ignore list".format(id, screen_name))
-                        else:
-
-                            logger.info("{0} in ignore list".format(id))
-
-                logger.info("Got {0} results".format(c))
-
-            except Exception as e:
-                logger.exception("Could not connect to TwitterAPI - are your credentials correct?")
-
-    else:
-
-        logger.warn("Search skipped! Queue: {0} Ratelimit: {1}/{2} ({3}%)".format(len(post_list),
+    if ratelimit_search[2] < Config.min_ratelimit_search:
+    	logger.warn("Search skipped! Queue: {0} Ratelimit: {1}/{2} ({3}%)".format(len(post_list),
                                                                                   ratelimit_search[1],
                                                                                   ratelimit_search[0],
                                                                                   ratelimit_search[2]))
+    	return
+
+    logger.info("=== SCANNING FOR NEW CONTESTS ===")
+
+    for search_query in Config.search_queries:
+
+        logger.info("Getting new results for: {0}".format(search_query))
+
+        try:
+            r = api.request( 'search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 50})
+            CheckError(r)
+            c = 0
+
+            for item in r:
+
+                c += 1
+                user_item = item['user']
+                screen_name = user_item['screen_name']
+                text = item['text']
+                text = text.replace("\n", "")
+                id = item['id']
+                original_id = id
+
+                if 'retweeted_status' in item:
+
+                    original_item = item['retweeted_status']
+                    original_id = original_item['id']
+                    original_user_item = original_item['user']
+                    original_screen_name = original_user_item['screen_name']
+
+                    if original_id in ignore_list:
+                    	logger.info("{0} ignored {1} in ignore list".format(id, original_id))
+                    	continue
+
+                    if original_user_item['id'] in ignore_list:
+                    	logger.info("{0} ignored {1} blocked and in ignore list".format(id,
+                                                                                            original_screen_name))
+                    	continue
+
+                    post_list.append(original_item)
+                    logger.info("{0} - {1} retweeting {2} - {3} : {4}".format(id, screen_name, original_id,
+                                                                                original_screen_name,text))
+                    ignore_list.append(original_id)                            
+
+                else:
+
+                    if id in ignore_list:
+                    	logger.info("{0} in ignore list".format(id))
+                    	continue
+
+                    if user_item['id'] in ignore_list:
+                    	logger.info("{0} ignored {1} blocked user in ignore list".format(id, screen_name))
+                    	continue
+
+                    post_list.append(item)
+                    logger.info("{0} - {1} : {2}".format(id, screen_name, text))
+                    ignore_list.append(id)                            
+
+            logger.info("Got {0} results".format(c))
+
+        except Exception as e:
+            logger.exception("Could not connect to TwitterAPI - are your credentials correct?")
+
 
 if __name__ == '__main__':
 
