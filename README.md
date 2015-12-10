@@ -36,6 +36,10 @@ Then run:
 
 	python3 main.py
 
+Credits
+-------------
+This project was originally forked from https://github.com/kurozael/twitter-contest-bot.
+
 Alternatives
 -------------
 
