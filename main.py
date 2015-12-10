@@ -59,7 +59,7 @@ class Config:
     max_follows = 1950
     search_queries = ["RT to win", "Retweet and win"]
     follow_keywords = [" follow ", " follower "]
-    fav_keywords = [" fav ", " favorite "]
+    fav_keywords = [" fav ", " favorite ", "like"]
 
     @staticmethod
     def load(filename):
