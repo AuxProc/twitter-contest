@@ -1,7 +1,7 @@
 {
         "search-queries": ["RT to win", "Retweet and win"],
         "follow-keywords": [" follow ", " follower "],
-        "fav-keywords": [" fav ", " favorite "],
+        "fav-keywords": [" fav ", " favorite ", " like "],
         "scan-update-time": 5400,
         "daily-tweets": 300,
         "rate-limit-update-time": 300,
